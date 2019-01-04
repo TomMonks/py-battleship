@@ -2,9 +2,16 @@
 # -*- coding: utf-8 -*-
 """
 
-Example: Complex_battleship 6.
+Classic battleship game
 
-Beginnings of two player game
+Classes:
+
+1. Game  -- contains main loop 
+2. GameBoard -- encapsulates a game board for either a player or computer
+3. RandomDeployEngine -- Randomly deploys ships to ocean sectors
+4. Battleship -- encapsulates the different classes of battleship
+
+Beginnings of two player game... still WIP
 
 Displays enemy and player board
 
@@ -17,6 +24,8 @@ HIT = '*'
 
 from random import randint
 from copy import deepcopy
+from colorama import Fore, Style
+import colorama
 
 
 class Game(object):
@@ -34,12 +43,14 @@ class Game(object):
       self.enemy_board.deploy_battleships()
       self.player_board.deploy_battleships()
    
-      self.enemy_board.unhide_ships() # debug!
+      #self.enemy_board.unhide_ships() # debug!
       self.player_board.unhide_ships()
+      
       
    
    def display_title(self):
-      print("\nBATTLESHIP")
+      
+      print(f"\n{Style.BRIGHT}{Fore.GREEN}BATTLESHIP!{Style.RESET_ALL}")
    
    def display(self):
             
@@ -48,68 +59,71 @@ class Game(object):
          
 
    def play(self):
+      """
+      Main game loop
+      
+      Computer and player take turns until someone sinks all of their
+      opponents battleships
+      
+      The game then terminates.
+      
+      """
+      
+      #player_target_controller = UserTargetController()
+      player_target_controller = RandomTargetController(self.enemy_board.grid_size)
+      enemy_target_controller = RandomTargetController(self.enemy_board.grid_size)
+      
       while self.enemy_board.battleships_remaining() > 0 and self.player_board.battleships_remaining() > 0:
             
-         self.take_turn(enemy_board)  # players turn
-         self.take_turn(player_board) # enemys turn
+         self.take_turn(enemy_board, player_target_controller)  # players turn
+         self.take_turn(player_board, enemy_target_controller) # enemys turn
          self.display()
       
       self._display_winner()
          
    
-
-         
-         
-      
-   def take_turn(self, board, missiles=1): 
+   def take_turn(self, board, target_controller): 
       '''
       Battleship game loop.
       
-      Plays until all missiles are depleted or all battleships are sunk.
-      
       Keyword arguments:
    
-      board -- a list of lists.  Each list is a row on the board.
-      battleships -- a list of lists.  Each list is a coordiate pair location of a bettleship
-      missiles -- the number of missiles available (default = 10)
+      board -- a GameBoard encapsulating one of the boards in play.
       '''
    
-      
       #could be missiles per turn... instead.
       #the there is an outer loop that switches between the two players
       #basically all of the code below becomes take_turn
       #board becomes a class
       #board.
+
+      #This is the bit that varies between player and enemy
+      # parameter or encapsulate whole function?
+      #coordinate = read_coordinate('Row, Col to target')
+      #coordinate = random_shot(board.grid_size)
+      coordinate = target_controller.select_target()
       
+      hit, sunk = board.missile_on_target(coordinate)
       
-      for missile in range(missiles):
+      if hit:
          
-         print("Missile #{0} of {1}".format(missile + 1, missiles))
-   
-         #coordinate = read_coordinate('Row, Col to target')
-         coordinate = random_shot(board.grid_size)
+         print(f'{Style.BRIGHT}{Fore.YELLOW}Hit!{Style.RESET_ALL}')
+         board.record_hit(coordinate)
          
-         hit, sunk = board.missile_on_target(coordinate)
-         
-         if hit:
+         if sunk:  
+            print(f"{Style.BRIGHT}{Fore.YELLOW}You sunk my Battleship!{Style.RESET_ALL}")
             
-            print("Hit")
-            board.record_hit(coordinate)
-            
-            if sunk:  
-               print("You sunk my Battleship!")
-               
-            
-         elif board.missile_out_of_bounds(coordinate):
-            print("Sector is out of game play bounds")
          
-         elif board.previously_targetted(coordinate):
-            print("This sector of the ocean grid has already been targeted.")
+      elif board.missile_out_of_bounds(coordinate):
+         print("Sector is out of game play bounds")
+      
+      elif board.previously_targetted(coordinate):
+         print("This sector of the ocean grid has already been targeted.")
+      
+      else:
          
-         else:
-            
-            print("Missed")
-            board.record_miss(coordinate)
+         print("Missed")
+         board.record_miss(coordinate)
 
 
    def _display_winner(self):
@@ -117,6 +131,29 @@ class Game(object):
          print("You sunk all my battleships!  You WIN!")
       else:
          print("The enemy has sunk all of your battleships. You lose!")
+
+
+
+
+      
+      
+class UserTargetController(object):
+   
+   def __init__(self):
+      pass
+   
+   def select_target(self):
+      return read_coordinate('Row, Col to target')
+   
+
+
+class RandomTargetController(object):
+   
+   def __init__(self, grid_size):
+      self.grid_size = grid_size
+   
+   def select_target(self):
+      return random_shot(self.grid_size)
 
 
 class RandomDeployEngine(object):
@@ -312,7 +349,7 @@ class GameBoard(object):
       Keyword arguments:
       coordinate -- list with 2 items [row, col]
       '''
-      self.board[coordinate[0]][coordinate[1]] = HIT
+      self.board[coordinate[0]][coordinate[1]] = HIT # f'{Style.BRIGHT}{Fore.GREEN}' + HIT + f'{Style.RESET_ALL}'
       
       
    def record_miss(self, coordinate):
@@ -469,6 +506,7 @@ def read_coordinate(prompt):
 
 if __name__ == "__main__":
 
+   
    #game is played on a n X n grid of size   
    grid_size = 10
   
