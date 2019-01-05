@@ -6,10 +6,13 @@ Classic battleship game
 
 Classes:
 
-1. Game  -- contains main loop 
+1. Game  -- contains main loop encapsulates player and enemy GameBoards (implements observerable interface)
 2. GameBoard -- encapsulates a game board for either a player or computer
 3. RandomDeployEngine -- Randomly deploys ships to ocean sectors
 4. Battleship -- encapsulates the different classes of battleship
+5. BattleshipTerminalView -- encapsulates a view of the game in the Terminal (observer pattern)
+6. UserTargetController -- Terminal Interface for selecting targerts
+7. RandomTargetController -- Encapsulates a random target selectio.  Same Interface as UserTargetController 
 
 Beginnings of two player game... still WIP
 
@@ -30,32 +33,38 @@ import colorama
 
 class Game(object):
    """
-   
    A game 'has-a' player GameBoard and a enemy GameBoard
-   
    """
    
    def __init__(self, player_board, enemy_board):
       self.player_board = player_board
       self.enemy_board = enemy_board
+      self._observers = []
+
+   def register_observer(self, to_register):
+      self._observers.append(to_register)
+      
+   def notify_observers(self, *args, **kwargs):
+      for observer in self._observers:
+         observer.notify(self, *args, *kwargs)
       
    def setup_board(self):
       self.enemy_board.deploy_battleships()
       self.player_board.deploy_battleships()
    
-      #self.enemy_board.unhide_ships() # debug!
+      self.enemy_board.unhide_ships() # debug!
       self.player_board.unhide_ships()
       
-      
-   
+   '''
    def display_title(self):
       
-      print(f"\n{Style.BRIGHT}{Fore.GREEN}BATTLESHIP!{Style.RESET_ALL}")
+      self._broadcast("BATTLESHIP")
    
    def display(self):
             
       enemy_board.display()
       player_board.display()
+   '''
          
 
    def play(self):
@@ -77,7 +86,7 @@ class Game(object):
             
          self.take_turn(enemy_board, player_target_controller)  # players turn
          self.take_turn(player_board, enemy_target_controller) # enemys turn
-         self.display()
+         self._broadcast("display_board", player_board, enemy_board)
       
       self._display_winner()
          
@@ -107,44 +116,104 @@ class Game(object):
       
       if hit:
          
-         print(f'{Style.BRIGHT}{Fore.YELLOW}Hit!{Style.RESET_ALL}')
+         self._broadcast('hit')
          board.record_hit(coordinate)
          
          if sunk:  
-            print(f"{Style.BRIGHT}{Fore.YELLOW}You sunk my Battleship!{Style.RESET_ALL}")
-            
-         
+            self._broadcast('sunk')
+
       elif board.missile_out_of_bounds(coordinate):
-         print("Sector is out of game play bounds")
-      
+         self._broadcast('out_bounds')
+         
       elif board.previously_targetted(coordinate):
-         print("This sector of the ocean grid has already been targeted.")
+         self._broadcast('gone')
+         
       
       else:
          
-         print("Missed")
+         self._broadcast("miss")
          board.record_miss(coordinate)
 
 
    def _display_winner(self):
       if self.enemy_board.battleships_remaining() == 0:
-         print("You sunk all my battleships!  You WIN!")
+         self._broadcast("You sunk all my battleships!  You WIN!")
       else:
-         print("The enemy has sunk all of your battleships. You lose!")
-
-
-
-
+         self._broadcast("The enemy has sunk all of your battleships. You lose!")
+         
+   def _broadcast(self, *args):
+      for observer in self._observers:
+         kwargs = {}
+         observer.notify(self, *args, **kwargs)
+         
       
+     
+
+
+class BattleshipTerminalView(object):
+   """
+   Encapsulates a view of the Battleship game in the Terminal
+   """
+   
+   def __init__(self, observable):
+      observable.register_observer(self)
+   
+   def notify(self, observerable, *args, **kwargs):
+      if len(args) > 0:
+         
+         msg = args[0].lower()
+         
+         if msg== 'hit':
+            print(f'{Style.BRIGHT}{Fore.YELLOW}Hit!{Style.RESET_ALL}')
+         elif msg == 'sunk':
+            print(f"{Style.BRIGHT}{Fore.GREEN}You sunk my Battleship!{Style.RESET_ALL}")
+         elif msg == 'out_bounds':
+            print(f"{Style.BRIGHT}{Fore.RED}Sector is out of game play bounds{Style.RESET_ALL}")
+         elif msg == "gone":
+            print("This sector of the ocean grid has already been targeted.")
+         elif msg == 'miss':
+            print("Missed")
+         elif msg == 'display_board':
+            player_board = args[1]
+            enemy_board = args[2]
+            self._show_board("ENEMY", enemy_board.board)
+            self._show_board("PLAYER", player_board.board)
+         else:
+            print(msg)
+         
+
+   def _show_board(self, name, board):
+      
+      headers = [str(i) for i in range(len(board))] 
+      blanks = [' ' for i in range(len(board))]
+      
+      to_view = deepcopy(board)
+   
+      for row in range(len(to_view)):
+         to_view[row].insert(0, headers[row]+'\t')
+      
+      headers.insert(0, name + '\t')
+      blanks.insert(0, ' \t')
+      to_view.insert(0, blanks)
+      to_view.insert(0, headers)
+      
+      
+      for row in range(len(to_view)):
+            print(' '.join(to_view[row]))  
+
+   def display_title(self):
+      print(f"\n{Style.BRIGHT}{Fore.GREEN}BATTLESHIP!{Style.RESET_ALL}")
+
       
 class UserTargetController(object):
    
    def __init__(self):
       pass
-   
+      
    def select_target(self):
       return read_coordinate('Row, Col to target')
    
+
 
 
 class RandomTargetController(object):
@@ -245,7 +314,6 @@ class RandomDeployEngine(object):
        return True   
       
 
-
 class GameBoard(object):
    """
    Encapsulates a game board (e.g. for player 1 or the enemy)
@@ -262,6 +330,10 @@ class GameBoard(object):
    6. Unhide battleships when displaying
    7. Request that gameboard is displayed
    
+   Implements Observable interface
+   register_observer(observer)
+   notify_observers(observable, *args, **kwargs)
+   
    """
    def __init__(self, grid_size, deploy_engine, name='PLAYER'):
 
@@ -270,6 +342,7 @@ class GameBoard(object):
       self.grid_size = grid_size
       self.deploy_engine = deploy_engine
       self.name = name
+      self._observers = []
       
       self._init_board(self.board, self.grid_size)
       
@@ -281,38 +354,18 @@ class GameBoard(object):
       for x in range(grid_size):
          board.append([UNKNOWN] * grid_size)
          
-         
-   def display(self):
-      print('\n')
-      self._show_board(self.name, self.board)   
-      
-   
-   def _show_board(self, name, board):
-      
-      headers = [str(i) for i in range(len(board))] 
-      blanks = [' ' for i in range(len(board))]
-      
-      to_view = deepcopy(board)
-   
-      for row in range(len(to_view)):
-         to_view[row].insert(0, headers[row]+'\t')
-      
-      headers.insert(0, name + '\t')
-      blanks.insert(0, ' \t')
-      to_view.insert(0, blanks)
-      to_view.insert(0, headers)
-      
-      
-      for row in range(len(to_view)):
-            print(' '.join(to_view[row]))  
-            
+   def register_observer(self, observer):
+      self._observers.append(observer)
+ 
+   def notify_observers(self, *args, **kwargs):
+      for observer in self._observers:
+         observer.notify(self, *args, **kwargs)   
    
    def deploy_battleships(self):
       self.battleships = self.deploy_engine.deploy()
    
    def battleships_remaining(self):
       return len(self.battleships)
-   
    
    def unhide_ships(self):
       ship_index = 0
@@ -383,6 +436,9 @@ class GameBoard(object):
 
 
             
+
+
+
 
 class Battleship(object):
     """
@@ -459,6 +515,8 @@ class Battleship(object):
     
 
 
+
+
          
 #functions to incorporate into gmae class later on?
 def random_shot(grid_size):
@@ -504,8 +562,11 @@ def read_coordinate(prompt):
 
 
 
-if __name__ == "__main__":
 
+
+if __name__ == "__main__":
+   
+   #colorama.init()  # for somoe reason this slows the code substantially?!!
    
    #game is played on a n X n grid of size   
    grid_size = 10
@@ -513,18 +574,22 @@ if __name__ == "__main__":
    #enemy ships sizes
    ship_sizes = [5, 4, 3, 3, 2]
    
-   
    #new code using GameBoard object
    player_board = GameBoard(grid_size, RandomDeployEngine(ship_sizes, grid_size))
    enemy_board = GameBoard(grid_size, RandomDeployEngine(ship_sizes, grid_size), name='ENEMY')
    
    game = Game(player_board, enemy_board)
+   
+   view = BattleshipTerminalView(game)
+   
    game.setup_board()
-   game.display_title()
-   game.display()
+   view.display_title()
+   
    game.play()
    
-   #play_game(player_board, enemy_board, enemy_ships, missiles = 20)
+   #colorama.deinit()
+   
+  
    
       
    
