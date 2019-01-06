@@ -78,8 +78,8 @@ class Game(object):
       
       """
       
-      #player_target_controller = UserTargetController()
-      player_target_controller = RandomTargetController(self.enemy_board.grid_size)
+      player_target_controller = UserTargetController()
+      #player_target_controller = RandomTargetController(self.enemy_board.grid_size)
       enemy_target_controller = RandomTargetController(self.enemy_board.grid_size)
       
       while self.enemy_board.battleships_remaining() > 0 and self.player_board.battleships_remaining() > 0:
